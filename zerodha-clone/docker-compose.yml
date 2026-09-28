@@ -1,0 +1,56 @@
+version: "3.9"
+
+# Brings up the whole trading platform with one command:
+#   docker compose up --build
+#   docker compose exec backend npm run seed   # first time only — demo data
+#
+# Dashboard  -> http://localhost:3000  (demo login: demo@zerodha.local / Demo@1234)
+# API        -> http://localhost:3002/api
+# Swagger UI -> http://localhost:3002/api-docs
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      MONGO_URL: mongodb://mongo:27017/zerodha-clone
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-a-real-deployment}
+      JWT_EXPIRES_IN: 7d
+      CLIENT_ORIGINS: http://localhost:3000
+      PRICE_TICK_INTERVAL_MS: 2000
+      SEED_DEMO_EMAIL: demo@zerodha.local
+      SEED_DEMO_PASSWORD: Demo@1234
+    ports:
+      - "3002:3002"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        REACT_APP_API_URL: http://localhost:3002/api
+        REACT_APP_SOCKET_URL: http://localhost:3002
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  mongo-data:
